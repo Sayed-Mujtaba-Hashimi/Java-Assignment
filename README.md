@@ -1,89 +1,81 @@
-# Network Models, Protocols, and Hostname Lookup
+# Java Network Connection Tester
 
-## 1. OSI model (7 layers)
+A Java Swing desktop utility that checks whether a TCP port on a host is reachable.
+It resolves the supplied host, attempts a TCP socket connection, and displays both
+plain-language results and technical diagnostics.
 
-```text
-+-------------------------------+
-| 7. Application                | User-facing network services
-+-------------------------------+
-| 6. Presentation               | Data format, encryption, compression
-+-------------------------------+
-| 5. Session                    | Starts, manages, ends sessions
-+-------------------------------+
-| 4. Transport                  | End-to-end delivery, ports, TCP/UDP
-+-------------------------------+
-| 3. Network                    | Logical addressing and routing (IP)
-+-------------------------------+
-| 2. Data Link                  | Frames, MAC addresses, local-link delivery
-+-------------------------------+
-| 1. Physical                   | Signals and bits over the medium
-+-------------------------------+
+## Features
+
+- Accepts a hostname, IPv4 address, or IPv6 literal.
+- Validates the host, TCP port (`1`–`65535`), and timeout (`100`–`120000` ms).
+- Resolves hostnames using `InetAddress.getAllByName()` and displays all returned IP addresses.
+- Attempts a TCP connection using `Socket.connect(SocketAddress, timeout)`.
+- Applies the configured timeout as a total TCP-connect time budget across resolved addresses. DNS lookup occurs before this timer starts and is governed by the operating system's resolver.
+- Uses try-with-resources so each test socket is closed automatically.
+- Runs the network work in a `SwingWorker` so the interface remains responsive.
+- Separates user-friendly explanations from developer diagnostics.
+
+## Exception handling
+
+The program handles these cases separately:
+
+- `UnknownHostException` — DNS could not resolve the hostname.
+- `SocketTimeoutException` — the TCP connection did not complete before the configured timeout.
+- `NoRouteToHostException` — the system has no route to the target.
+- `ConnectException` — the target refused or could not establish the connection (commonly a closed port).
+- `SocketException` — another socket-level problem occurred.
+- `SecurityException` — the runtime denied the network operation.
+- `IOException` — a general network I/O failure.
+
+Input errors are caught before DNS resolution or socket creation.
+
+## Layout and components
+
+- `JFrame` provides the main window.
+- `JPanel` sections organize the header, connection form, and output area.
+- `BorderLayout` structures the main window and result cards.
+- `GridBagLayout` aligns the hostname, port, and timeout fields.
+- `GridLayout` places the two result panels side by side.
+- `JTextField` collects the host, port, and timeout; `JButton` starts a test or clears output.
+- `JTextArea` displays results inside `JScrollPane` components.
+- `ActionListener` handles button and Enter-key events.
+
+## Run from source
+
+Requires JDK 17 or newer.
+
+```bash
+javac -d classes NetworkConnectionTester.java
+java -cp classes NetworkConnectionTester
 ```
 
-## 2. TCP/IP model (4 layers)
+## Run the packaged JAR
 
-```text
-+-------------------------------+
-| Application                   | HTTP, HTTPS, DNS, SMTP, POP3, IMAP
-+-------------------------------+
-| Transport                     | TCP and UDP; port numbers
-+-------------------------------+
-| Internet                      | IP addressing and routing
-+-------------------------------+
-| Network Access / Link         | Frames, MAC addresses, physical media
-+-------------------------------+
+```bash
+java -jar NetworkConnectionTester.jar
 ```
 
-### OSI-to-TCP/IP mapping
+## Screenshots included
 
-| OSI | TCP/IP |
-|---|---|
-| Application (7), Presentation (6), Session (5) | Application |
-| Transport (4) | Transport |
-| Network (3) | Internet |
-| Data Link (2), Physical (1) | Network Access / Link |
+1. `screenshots/01_invalid_port.png` — port `70000` is rejected by input validation; no DNS lookup or TCP attempt occurs.
+2. `screenshots/02_dns_failure.png` — `no-such-hostname.invalid` produces `UnknownHostException`.
+3. `screenshots/03_connection_refused.png` — `127.0.0.1:1` resolves but the local TCP port refuses the connection, producing `ConnectException`.
+4. `screenshots/04_success_localhost.png` — successful TCP handshake to a temporary local test server (included as an additional verification screenshot).
 
-## 3. Protocol purposes and default ports
+The screenshots are captured from the actual Swing application. The success screenshot uses a local HTTP server only as a temporary listener; the tester itself sends no application payload.
 
-| Protocol | Application purpose | Default port |
-|---|---|---|
-| HTTP | Transfers web pages/resources without TLS encryption by itself | TCP 80 |
-| HTTPS | HTTP protected with TLS | TCP 443 |
-| DNS | Resolves domain names and provides domain information | UDP 53 and TCP 53 |
-| SMTP | Sends and relays outgoing email | TCP 25 (mail transfer); TCP 587 commonly for message submission |
-| POP3 | Retrieves/downloads email from a mail server | TCP 110 |
-| IMAP | Accesses and synchronizes email while keeping it on the server | TCP 143 |
+## Re-create the failure screenshots
 
-Encrypted variants commonly use POP3S TCP 995 and IMAPS TCP 993. DNS uses both UDP and TCP port 53.
+After compiling, the source includes optional demo arguments to prefill a scenario and save the visible application content as a PNG:
 
-## 4. Java program
-
-`HostIPLookup.java` accepts a hostname, uses `InetAddress.getAllByName()` to print all returned IP addresses, and handles empty input and `UnknownHostException`.
-
-Compile and run in Windows PowerShell:
-
-```powershell
-javac HostIPLookup.java
-java HostIPLookup
+```bash
+java -cp classes NetworkConnectionTester --demo-scenario invalid-port --capture-file screenshots/01_invalid_port.png
+java -cp classes NetworkConnectionTester --demo-scenario dns-failure --capture-file screenshots/02_dns_failure.png
+java -cp classes NetworkConnectionTester --demo-scenario connection-refused --capture-file screenshots/03_connection_refused.png
 ```
 
-Example hostname: `google.com`. Actual returned addresses can vary by DNS resolver, location, and time.
+These flags are only for demonstrating the UI; normal use starts with the standard command above.
 
-## 5. Required command outputs — capture on your computer
+## Scope note
 
-Run these in Windows PowerShell or Command Prompt and take screenshots showing the command and output:
-
-```powershell
-ipconfig /all
-nslookup google.com
-tracert -d google.com
-```
-
-Use traceroute/tracert only where permitted by your instructor or network administrator. Some networks block or rate-limit its responses.
-
-**Do not submit fabricated outputs.** Your IP configuration, DNS server, and route are specific to your computer. Add your screenshots to a `Command-Outputs` folder:
-- `ipconfig.png`
-- `nslookup.png`
-- `tracert.png`
-
-See [Network_Layers_Explanation.md](Network_Layers_Explanation.md) for the one-page explanation connecting the command outputs to network layers.
+This program tests TCP reachability only. A successful connection does not prove that an application protocol (such as HTTP or SSH) is working, and it does not authenticate to the remote service. The configured timeout covers the TCP connection attempts, not DNS resolution.
